@@ -60,7 +60,7 @@ class MetalDevice {
     
     final func buffer<T>(array: Array<T>, storageMode: MTLResourceOptions = []) -> MTLBuffer {
         let size = array.count * MemoryLayout.size(ofValue: array[0])
-        return device.makeBuffer(bytes: array, length: size, options: storageMode)!
+        return device.makeBuffer(bytes: array.withUnsafeBufferPointer { $0.baseAddress.unsafelyUnwrapped }, length: size, options: storageMode).unsafelyUnwrapped
     }
     
     final func newCommandBuffer() -> MTLCommandBuffer {
@@ -106,10 +106,11 @@ class MetalDevice {
             throw MetalDeviceError.failedToCreateFunction(name: computeFunctionName)
         }
         
-        let pipelineState =  try device.makeComputePipelineState(function: computeFunction)
+        let pipelineState = try device.makeComputePipelineState(function: computeFunction)
         
         pipelineCache.setObject(pipelineState, forKey: cacheKey)
         
         return pipelineState
     }
+    
 }

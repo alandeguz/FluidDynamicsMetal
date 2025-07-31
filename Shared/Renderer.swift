@@ -8,7 +8,7 @@
 
 import MetalKit
 
-typealias FloatTuple = (float2, float2, float2, float2, float2)
+typealias FloatTuple = (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)
 
 func / (rhs: FloatTuple, lhs: Float) -> FloatTuple {
     return FloatTuple(rhs.0 / lhs, rhs.1 / lhs, rhs.2 / lhs, rhs.3 / lhs, rhs.4 / lhs)
@@ -22,19 +22,19 @@ struct StaticData {
     var positions: FloatTuple
     var impulses: FloatTuple
 
-    var impulseScalar: float2
-    var offsets: float2
+    var impulseScalar: SIMD2<Float>
+    var offsets: SIMD2<Float>
     
-    var screenSize: float2
+    var screenSize: SIMD2<Float>
     var inkRadius: simd_float1
 }
 
 struct VertexData {
-    let position: float2
-    let texCoord: float2
+    let position: SIMD2<Float>
+    let texCoord: SIMD2<Float>
 }
 
-class Renderer: NSObject {
+class Renderer: NSObject, MTKViewDelegate {
     static let MaxBuffers = 3
 
     //Adjust this to reduce or increase the size of the slab textures. Reasonable values are in the range [0.5, 3.0]
@@ -42,10 +42,10 @@ class Renderer: NSObject {
 
     //Vertex and index data
     static let vertexData: [VertexData] = [
-        VertexData(position: float2(x: -1.0, y: -1.0), texCoord: float2(x: 0.0, y: 1.0)),
-        VertexData(position: float2(x: 1.0, y: -1.0), texCoord: float2(x: 1.0, y: 1.0)),
-        VertexData(position: float2(x: -1.0, y: 1.0), texCoord: float2(x: 0.0, y: 0.0)),
-        VertexData(position: float2(x: 1.0, y: 1.0), texCoord: float2(x: 1.0, y: 0.0)),
+        VertexData(position: SIMD2<Float>(x: -1.0, y: -1.0), texCoord: SIMD2<Float>(x: 0.0, y: 1.0)),
+        VertexData(position: SIMD2<Float>(x: 1.0, y: -1.0), texCoord: SIMD2<Float>(x: 1.0, y: 1.0)),
+        VertexData(position: SIMD2<Float>(x: -1.0, y: 1.0), texCoord: SIMD2<Float>(x: 0.0, y: 0.0)),
+        VertexData(position: SIMD2<Float>(x: 1.0, y: 1.0), texCoord: SIMD2<Float>(x: 1.0, y: 0.0)),
         ]
 
     static let indices: [UInt16] = [2, 1, 0, 1, 2, 3]
@@ -55,7 +55,7 @@ class Renderer: NSObject {
     private let indexData = MetalDevice.sharedInstance.buffer(array: Renderer.indices, storageMode: [.storageModeShared])
 
     //Shaders
-    private let applyForceVectorShader: RenderShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+    private let applyForceVectorShader: RenderShader
     private let applyForceScalarShader: RenderShader = RenderShader(fragmentShader: "applyForceScalar", vertexShader: "vertexShader", pixelFormat: .rg16Float)
     private let advectShader: RenderShader = RenderShader(fragmentShader: "advect", vertexShader: "vertexShader", pixelFormat: .rg16Float)
     private let divergenceShader: RenderShader = RenderShader(fragmentShader: "divergence", vertexShader: "vertexShader", pixelFormat: .rg16Float)
@@ -83,17 +83,34 @@ class Renderer: NSObject {
     private var avaliableBufferIndex: Int = 0
 
     private let semaphore = DispatchSemaphore(value: MaxBuffers)
+    private var initializedSize: CGSize = .zero
 
     //Index of the displayed slab
     private var currentIndex = 0
 
-    init(metalView: MTKView) {
+    init(metalView: MTKView) throws {
+        applyForceVectorShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
         super.init()
         metalView.device = MetalDevice.sharedInstance.device
         metalView.colorPixelFormat = .bgra8Unorm
         metalView.framebufferOnly = true
         metalView.preferredFramesPerSecond = 60
 
+        mtkView(metalView, drawableSizeWillChange: metalView.drawableSize)
+    }
+    
+    init(noView: Bool) throws {
+        applyForceVectorShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        super.init()
+
+    }
+    
+    func update(metalView: MTKView) throws {
+        metalView.device = MetalDevice.sharedInstance.device
+        metalView.colorPixelFormat = .bgra8Unorm
+        metalView.framebufferOnly = true
+        metalView.preferredFramesPerSecond = 60
+        
         mtkView(metalView, drawableSizeWillChange: metalView.drawableSize)
     }
 
@@ -116,12 +133,12 @@ class Renderer: NSObject {
     private final func initBuffers(width: Int, height: Int) {
         let bufferSize = MemoryLayout<StaticData>.stride
 
-        var staticData = StaticData(positions: (float2(), float2(), float2(), float2(), float2()),
-                                    impulses: (float2(), float2(), float2(), float2(), float2()),
-                                    impulseScalar: float2(),
-                                    offsets: float2(1.0/Float(width), 1.0/Float(height)),
-                                    screenSize: float2(Float(width), Float(height)),
-                                    inkRadius: 150 / Renderer.ScreenScaleAdjustment)
+        var staticData = StaticData(positions: (SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>()),
+                                    impulses: (SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>()),
+                                    impulseScalar: SIMD2<Float>(),
+                                    offsets: SIMD2<Float>(1.0/Float(width), 1.0/Float(height)),
+                                    screenSize: SIMD2<Float>(Float(width), Float(height)),
+                                    inkRadius: 150 /* QQQ 150 */ / Renderer.ScreenScaleAdjustment)
 
         uniformsBuffers.removeAll()
         for _ in 0..<Renderer.MaxBuffers {
@@ -142,7 +159,7 @@ class Renderer: NSObject {
 
             bufferData.pointee.positions = alteredPositions
             bufferData.pointee.impulses = impulses
-            bufferData.pointee.impulseScalar = float2(0.8, 0.0)
+            bufferData.pointee.impulseScalar = SIMD2<Float>(0.8, 0.0)
         }
 
         avaliableBufferIndex = (avaliableBufferIndex + 1) % Renderer.MaxBuffers
@@ -160,6 +177,66 @@ class Renderer: NSObject {
         default:
             return density
         }
+    }
+    
+    func draw(in view: MTKView) {
+        // Ensure valid size
+        let size = view.drawableSize
+        let width = Int(size.width / CGFloat(Renderer.ScreenScaleAdjustment))
+        let height = Int(size.height / CGFloat(Renderer.ScreenScaleAdjustment))
+        
+        // Lazy initialization: if surfaces are uninitialized or size changed, recreate them
+        if width > 0, height > 0,
+           (density == nil || Int(initializedSize.width) != Int(size.width) || Int(initializedSize.height) != Int(size.height)) {
+            initSurfaces(width: width, height: height)
+            initBuffers(width: width, height: height)
+            initializedSize = size
+        }
+        
+        // If we still don't have valid surfaces, skip drawing
+        guard density != nil else { return }
+        
+        // --- existing rendering code follows ---
+        semaphore.wait()
+        let commandBuffer = MetalDevice.sharedInstance.newCommandBuffer()
+        let dataBuffer = nextBuffer(positions: positions, directions: directions)
+        
+        commandBuffer.addCompletedHandler { _ in
+            self.semaphore.signal()
+        }
+        
+        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: velocity, destination: velocity)
+        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: density, destination: density)
+        
+        if let _ = positions, let _ = directions {
+            applyForceVector(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: velocity)
+            applyForceScalar(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: density)
+        }
+        
+        computeVorticity(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityVorticity)
+        computeVorticityConfinement(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, vorticity: velocityVorticity, destination: velocity)
+        
+        computeDivergence(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityDivergence)
+        
+        for _ in 0..<40 {
+            computePressure(commandBuffer: commandBuffer, dataBuffer: dataBuffer, x: pressure, b: velocityDivergence, destination: pressure)
+        }
+        
+        subtractGradient(commandBuffer: commandBuffer, dataBuffer: dataBuffer, p: pressure, w: velocity, destination: velocity)
+        
+        if let drawable = view.currentDrawable {
+            let nextTexture = drawable.texture
+            render(commandBuffer: commandBuffer, destination: nextTexture)
+            commandBuffer.present(drawable)
+        }
+        
+        commandBuffer.commit()
+        directions = positions
+    }
+    
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        // Just record the size; do not create textures here
+        initializedSize = size
     }
 }
 
@@ -272,54 +349,5 @@ extension Renderer {
     }
 }
 
-extension Renderer: MTKViewDelegate {
-    func draw(in view: MTKView) {
-        semaphore.wait()
-        let commandBuffer = MetalDevice.sharedInstance.newCommandBuffer()
+    
 
-        let dataBuffer = nextBuffer(positions: positions, directions: directions)
-
-        commandBuffer.addCompletedHandler({ (commandBuffer) in
-            self.semaphore.signal()
-        })
-
-        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: velocity, destination: velocity)
-        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: density, destination: density)
-
-        if let _ = positions, let _ = directions {
-            applyForceVector(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: velocity)
-            applyForceScalar(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: density)
-        }
-
-        computeVorticity(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityVorticity)
-        computeVorticityConfinement(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, vorticity: velocityVorticity, destination: velocity)
-
-        computeDivergence(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityDivergence)
-
-        for _ in 0..<40 {
-            computePressure(commandBuffer: commandBuffer, dataBuffer: dataBuffer, x: pressure, b: velocityDivergence, destination: pressure)
-        }
-
-        subtractGradient(commandBuffer: commandBuffer, dataBuffer: dataBuffer, p: pressure, w: velocity, destination: velocity)
-
-        if let drawable = view.currentDrawable {
-
-            let nextTexture = drawable.texture
-            render(commandBuffer: commandBuffer, destination: nextTexture)
-
-            commandBuffer.present(drawable)
-        }
-
-        commandBuffer.commit()
-
-        directions = positions
-    }
-
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        let width = Int(Float(view.bounds.width) / Renderer.ScreenScaleAdjustment)
-        let height = Int(Float(view.bounds.height) / Renderer.ScreenScaleAdjustment)
-
-        initSurfaces(width: width, height: height)
-        initBuffers(width: width, height: height)
-    }
-}

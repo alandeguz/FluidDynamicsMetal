@@ -21,7 +21,6 @@ struct VertexOut {
 
 //Render to screen
 vertex VertexOut vertexShader(constant VertexIn* vertexArray [[buffer(0)]], unsigned int vid [[vertex_id]]) {
-
     VertexIn vertexData = vertexArray[vid];
     VertexOut vertexDataOut;
     vertexDataOut.position = float4(vertexData.position.x, vertexData.position.y, 0.0, 1.0);
@@ -29,12 +28,26 @@ vertex VertexOut vertexShader(constant VertexIn* vertexArray [[buffer(0)]], unsi
     return vertexDataOut;
 }
 
-fragment half4 visualizeScalar(VertexOut fragmentIn [[stage_in]], texture2d<float, access::sample> tex2d [[texture(0)]]) {
+fragment half4 visualizeScalarOld(VertexOut fragmentIn [[stage_in]], texture2d<float, access::sample> tex2d [[texture(0)]]) {
     constexpr sampler sampler2d(filter::nearest);
 
     half4 color = half4(tex2d.sample(sampler2d, fragmentIn.textureCoorinates));
 
-    return half4(half3(0.0, 0.06, 0.19) * abs(color.xxx), 1.0);
+//    return half4(half3(0.0, 0.06, 0.19) * abs(color.xxx), 1.0);
+//    return half4(half3(0.33, 0, 0) * abs(color.xxx), 1.0);
+    return half4(half3(0.8, 0.8, 0.8) * abs(color.xxx), 1.0);
+}
+
+fragment half4 visualizeScalar(VertexOut fragmentIn [[stage_in]],
+                               texture2d<float, access::sample> tex2d [[texture(0)]]) {
+    constexpr sampler sampler2d(filter::nearest);
+    
+    half4 sampled = half4(tex2d.sample(sampler2d, fragmentIn.textureCoorinates));
+    
+    // Create a blueish color (example)
+    half3 baseColor = half3(0.2, 0.4, 1.0);
+    
+    return half4(baseColor * abs(sampled.xxx), 1.0);
 }
 
 fragment half4 visualizeVector(VertexOut fragmentIn [[stage_in]], texture2d<float, access::sample> tex2d [[texture(0)]]) {

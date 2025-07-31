@@ -9,66 +9,62 @@
 import AppKit
 import MetalKit
 
+import Cocoa
+import MetalKit
+
 class RenderViewController: NSViewController {
     var renderer: Renderer!
-    var metalView: MTKView {
-        return view as! MTKView
+    
+    // Strongly type the view as RenderMTKView
+    var metalView: RenderMTKView {
+        print(view)
+        return view as! RenderMTKView
     }
-
+    
     var eventMonitor: Any?
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        renderer = Renderer(metalView: metalView)
+        
+        // Set up Renderer
+        renderer = try? Renderer(metalView: metalView)
         metalView.delegate = renderer
-
+        metalView.renderer = renderer
+        
+        // Metal view settings
+        metalView.enableSetNeedsDisplay = false
+        metalView.isPaused = false
+        metalView.framebufferOnly = true
+        metalView.colorPixelFormat = .bgra8Unorm
+        
+        // Keyboard event monitor
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             self.keyDown(with: $0)
             return $0
         }
     }
-
+    
     deinit {
         NSEvent.removeMonitor(eventMonitor as Any)
     }
-
-    override func mouseDown(with event: NSEvent) {
-        let point = event.locationInWindow
-
-        let position = float2(Float(point.x), Float(metalView.bounds.height - point.y))
-        let tuple = FloatTuple(position, float2(), float2(), float2(), float2())
-        renderer.updateInteraction(points: tuple, in: metalView)
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        let point = event.locationInWindow
-
-        let position = float2(Float(point.x), Float(metalView.bounds.height - point.y))
-        let tuple = FloatTuple(position, float2(), float2(), float2(), float2())
-        renderer.updateInteraction(points: tuple, in: metalView)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        renderer.updateInteraction(points: nil, in: metalView)
-    }
-
+    
+    // Keyboard input
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 0x31:
+        case 0x31: // Spacebar
             changePauseState()
-        case 0x01:
+        case 0x01: // 'S'
             changeSource()
         default:
             break
         }
     }
-
+    
     private func changeSource() {
         renderer.nextSlab()
     }
-
+    
     private func changePauseState() {
-        metalView.isPaused = !metalView.isPaused
+        metalView.isPaused.toggle()
     }
 }

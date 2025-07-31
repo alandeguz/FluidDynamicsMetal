@@ -20,11 +20,23 @@ class RenderViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+//        view.addSubview({
+//           let view = UIView(frame: .init(origin: .init(x: 20, y: 20), size: .init(width: 200, height: 200)))
+//            view.backgroundColor = UIColor.clear
+//            view.addSubview({
+//                let label = UILabel(frame: .init(origin: .init(x: 0, y: 0), size: .init(width: 100, height: 30)))
+//                label.textColor = .white
+//                label.text = "test"
+//                return label
+//            }())
+//            return view
+//        }())
 
-        renderer = Renderer(metalView: metalView)
+        renderer = try? Renderer(metalView: metalView)
         metalView.delegate = renderer
 
         metalView.isExclusiveTouch = true
+        metalView.isOpaque = false
 
         let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(doubleTap))
         doubleTapGesture.numberOfTapsRequired = 2
@@ -36,8 +48,8 @@ class RenderViewController: UIViewController {
         gestureRecognizer.numberOfTouchesRequired = 2
         view.addGestureRecognizer(gestureRecognizer)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(willResignActive), name: .UIApplicationWillResignActive, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive), name: .UIApplicationDidBecomeActive, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(willResignActive), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
     deinit {
@@ -55,44 +67,57 @@ class RenderViewController: UIViewController {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        let positions = touches.map { (touch) -> float2 in
-            let position = touch.location(in: touch.view)
-            return float2(Float(position.x), Float(position.y))
+        guard let metalView = view as? MTKView else { return }
+        
+        let scale = metalView.contentScaleFactor
+        
+        let positions: [SIMD2<Float>] = touches.map { touch in
+            let location = touch.location(in: metalView)
+            let x = Float(location.x * scale)
+            // No Y flip on iOS
+            let y = Float(location.y * scale)
+            return SIMD2<Float>(x, y)
         }
-
+        
         let tupleSize = MemoryLayout<FloatTuple>.size
-        let arraySize = MemoryLayout<float2>.size * positions.count
-
+        let arraySize = MemoryLayout<SIMD2<Float>>.size * positions.count
         let tuple = malloc(tupleSize).assumingMemoryBound(to: FloatTuple.self)
-
+        
         memset(tuple, 0, tupleSize)
         memcpy(tuple, positions, arraySize)
-
+        
         renderer.updateInteraction(points: tuple.pointee, in: metalView)
     }
-
+    
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        let positions = touches.map { (touch) -> float2 in
-            let position = touch.location(in: touch.view)
-            return float2(Float(position.x), Float(position.y))
+        guard let metalView = view as? MTKView else { return }
+        
+        let scale = metalView.contentScaleFactor
+        
+        let positions: [SIMD2<Float>] = touches.map { touch in
+            let location = touch.location(in: metalView)
+            let x = Float(location.x * scale)
+            let y = Float(location.y * scale)
+            return SIMD2<Float>(x, y)
         }
-
+        
         let tupleSize = MemoryLayout<FloatTuple>.size
-        let arraySize = MemoryLayout<float2>.size * positions.count
-
+        let arraySize = MemoryLayout<SIMD2<Float>>.size * positions.count
         let tuple = malloc(tupleSize).assumingMemoryBound(to: FloatTuple.self)
-
+        
         memset(tuple, 0, tupleSize)
         memcpy(tuple, positions, arraySize)
-
+        
         renderer.updateInteraction(points: tuple.pointee, in: metalView)
     }
-
+    
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let metalView = view as? MTKView else { return }
         renderer.updateInteraction(points: nil, in: metalView)
     }
-
+    
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let metalView = view as? MTKView else { return }
         renderer.updateInteraction(points: nil, in: metalView)
     }
 

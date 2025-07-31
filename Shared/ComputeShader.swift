@@ -28,27 +28,23 @@ class ComputeShader {
     }
 
     func calculateWithCommandBuffer(buffer: MTLCommandBuffer, configureEncoder: ((_ commandEncoder: MTLComputeCommandEncoder) -> Void)?) {
-        if let computePipelineState = computePipelineState, let computeCommandEncoder = buffer.makeComputeCommandEncoder() {
-            computeCommandEncoder.pushDebugGroup("Base Filter Compute Encoder")
-            computeCommandEncoder.setComputePipelineState(computePipelineState)
-
-            configureEncoder?(computeCommandEncoder)
-
-            computeCommandEncoder.endEncoding()
-            computeCommandEncoder.popDebugGroup()
-        }
+        guard let computePipelineState = computePipelineState, let computeCommandEncoder = buffer.makeComputeCommandEncoder() else { return }
+        computeCommandEncoder.pushDebugGroup("Base Filter Compute Encoder")
+        computeCommandEncoder.setComputePipelineState(computePipelineState)
+        
+        configureEncoder?(computeCommandEncoder)
+        
+        computeCommandEncoder.endEncoding()
+        computeCommandEncoder.popDebugGroup()
     }
 
     private func configurePipeline() {
-        if pipelineState.computeShader.count > 0 {
-            if computePipelineState != nil {
-                return
-            }
-            do {
-                computePipelineState = try MetalDevice.createComputePipeline(computeFunctionName: pipelineState.computeShader)
-            } catch {
-                print("Could not create compute pipeline state.")
-            }
+        guard pipelineState.computeShader.count > 0 else { return }
+        if computePipelineState != nil { return }
+        do {
+            computePipelineState = try MetalDevice.createComputePipeline(computeFunctionName: pipelineState.computeShader)
+        } catch {
+            print("Could not create compute pipeline state.")
         }
     }
 
