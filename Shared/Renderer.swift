@@ -9,22 +9,22 @@
 import MetalKit
 
 typealias FloatTuple = (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)
+private let pressureIterations = 40
 
+// Operators
 func / (rhs: FloatTuple, lhs: Float) -> FloatTuple {
-    return FloatTuple(rhs.0 / lhs, rhs.1 / lhs, rhs.2 / lhs, rhs.3 / lhs, rhs.4 / lhs)
+    (rhs.0 / lhs, rhs.1 / lhs, rhs.2 / lhs, rhs.3 / lhs, rhs.4 / lhs)
 }
-
 func - (rhs: FloatTuple, lhs: FloatTuple) -> FloatTuple {
-    return FloatTuple(rhs.0 - lhs.0, rhs.1 - lhs.1, rhs.2 - lhs.2, rhs.3 - lhs.3, rhs.4 - lhs.4)
+    (rhs.0 - lhs.0, rhs.1 - lhs.1, rhs.2 - lhs.2, rhs.3 - lhs.3, rhs.4 - lhs.4)
 }
 
+// Uniforms
 struct StaticData {
     var positions: FloatTuple
     var impulses: FloatTuple
-
     var impulseScalar: SIMD2<Float>
     var offsets: SIMD2<Float>
-    
     var screenSize: SIMD2<Float>
     var inkRadius: simd_float1
 }
@@ -34,320 +34,250 @@ struct VertexData {
     let texCoord: SIMD2<Float>
 }
 
-class Renderer: NSObject, MTKViewDelegate {
+class Renderer: NSObject {
     static let MaxBuffers = 3
-
-    //Adjust this to reduce or increase the size of the slab textures. Reasonable values are in the range [0.5, 3.0]
     static let ScreenScaleAdjustment: Float = 1.0
-
-    //Vertex and index data
+    
+    // Quad data
     static let vertexData: [VertexData] = [
-        VertexData(position: SIMD2<Float>(x: -1.0, y: -1.0), texCoord: SIMD2<Float>(x: 0.0, y: 1.0)),
-        VertexData(position: SIMD2<Float>(x: 1.0, y: -1.0), texCoord: SIMD2<Float>(x: 1.0, y: 1.0)),
-        VertexData(position: SIMD2<Float>(x: -1.0, y: 1.0), texCoord: SIMD2<Float>(x: 0.0, y: 0.0)),
-        VertexData(position: SIMD2<Float>(x: 1.0, y: 1.0), texCoord: SIMD2<Float>(x: 1.0, y: 0.0)),
-        ]
-
+        VertexData(position: [-1, -1], texCoord: [0, 1]),
+        VertexData(position: [ 1, -1], texCoord: [1, 1]),
+        VertexData(position: [-1,  1], texCoord: [0, 0]),
+        VertexData(position: [ 1,  1], texCoord: [1, 0])
+    ]
     static let indices: [UInt16] = [2, 1, 0, 1, 2, 3]
-
-    //Vertex and Index Metal buffers
+    
     private let vertData = MetalDevice.sharedInstance.buffer(array: Renderer.vertexData, storageMode: [.storageModeShared])
     private let indexData = MetalDevice.sharedInstance.buffer(array: Renderer.indices, storageMode: [.storageModeShared])
-
-    //Shaders
-    private let applyForceVectorShader: RenderShader
-    private let applyForceScalarShader: RenderShader = RenderShader(fragmentShader: "applyForceScalar", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let advectShader: RenderShader = RenderShader(fragmentShader: "advect", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let divergenceShader: RenderShader = RenderShader(fragmentShader: "divergence", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let jacobiShader: RenderShader = RenderShader(fragmentShader: "jacobi", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let vorticityShader: RenderShader = RenderShader(fragmentShader: "vorticity", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let vorticityConfinementShader: RenderShader = RenderShader(fragmentShader: "vorticityConfinement", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-    private let gradientShader: RenderShader = RenderShader(fragmentShader: "gradient", vertexShader: "vertexShader", pixelFormat: .rg16Float)
-
-    private let renderVector: RenderShader = RenderShader(fragmentShader: "visualizeVector", vertexShader: "vertexShader")
-    private let renderScalar: RenderShader = RenderShader(fragmentShader: "visualizeScalar", vertexShader: "vertexShader")
-
-    //Touch or Mouse positions
+    
+    // Shaders
+    private var applyForceVectorShader: RenderShader!
+    private var applyForceScalarShader: RenderShader!
+    private var advectShader: RenderShader!
+    private var divergenceShader: RenderShader!
+    private var jacobiShader: RenderShader!
+    private var vorticityShader: RenderShader!
+    private var vorticityConfinementShader: RenderShader!
+    private var gradientShader: RenderShader!
+    private var renderVector: RenderShader!
+    private var renderScalar: RenderShader!
+    
+    // State
     private var positions: FloatTuple?
     private var directions: FloatTuple?
-
-    //Surfaces
+    
     private var velocity: Slab!
     private var density: Slab!
     private var velocityDivergence: Slab!
     private var velocityVorticity: Slab!
     private var pressure: Slab!
-
-    //Inflight buffers
+    
     private var uniformsBuffers: [MTLBuffer] = []
     private var avaliableBufferIndex: Int = 0
-
+    
     private let semaphore = DispatchSemaphore(value: MaxBuffers)
     private var initializedSize: CGSize = .zero
-
-    //Index of the displayed slab
     private var currentIndex = 0
-
+    
+    // MARK: - Init
     init(metalView: MTKView) throws {
-        applyForceVectorShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
         super.init()
-        metalView.device = MetalDevice.sharedInstance.device
-        metalView.colorPixelFormat = .bgra8Unorm
-        metalView.framebufferOnly = true
-        metalView.preferredFramesPerSecond = 60
-
-        mtkView(metalView, drawableSizeWillChange: metalView.drawableSize)
+        setupShaders()
+        configure(metalView: metalView)
     }
     
     init(noView: Bool) throws {
-        applyForceVectorShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
         super.init()
-
+        setupShaders()
     }
     
     func update(metalView: MTKView) throws {
+        configure(metalView: metalView)
+    }
+    
+    func nextSlab() {
+        currentIndex = (currentIndex + 1) % 4
+    }
+    
+    func updateInteraction(points: FloatTuple?, in view: MTKView) {
+        positions = points
+    }
+    
+    private func configure(metalView: MTKView) {
         metalView.device = MetalDevice.sharedInstance.device
         metalView.colorPixelFormat = .bgra8Unorm
         metalView.framebufferOnly = true
         metalView.preferredFramesPerSecond = 60
-        
         mtkView(metalView, drawableSizeWillChange: metalView.drawableSize)
     }
-
-    func nextSlab() {
-        currentIndex = (currentIndex + 1) % 4
+    
+    private func setupShaders() {
+        applyForceVectorShader = RenderShader(fragmentShader: "applyForceVector", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        applyForceScalarShader = RenderShader(fragmentShader: "applyForceScalar", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        advectShader = RenderShader(fragmentShader: "advect", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        divergenceShader = RenderShader(fragmentShader: "divergence", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        jacobiShader = RenderShader(fragmentShader: "jacobi", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        vorticityShader = RenderShader(fragmentShader: "vorticity", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        vorticityConfinementShader = RenderShader(fragmentShader: "vorticityConfinement", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        gradientShader = RenderShader(fragmentShader: "gradient", vertexShader: "vertexShader", pixelFormat: .rg16Float)
+        
+        renderVector = RenderShader(fragmentShader: "visualizeVector", vertexShader: "vertexShader")
+        renderScalar = RenderShader(fragmentShader: "visualizeScalar", vertexShader: "vertexShader")
     }
-
-    func updateInteraction(points: FloatTuple?, in view: MTKView) {
-        positions = points
-    }
-
-    private final func initSurfaces(width: Int, height: Int) {
+    
+    private func initSurfaces(width: Int, height: Int) {
         velocity = Slab(width: width, height: height, format: .rg16Float, name: "Velocity")
         density = Slab(width: width, height: height, format: .rg16Float, name: "Density")
         velocityDivergence = Slab(width: width, height: height, format: .rg16Float, name: "Divergence")
         velocityVorticity = Slab(width: width, height: height, format: .rg16Float, name: "Vorticity")
         pressure = Slab(width: width, height: height, format: .rg16Float, name: "Pressure")
     }
-
-    private final func initBuffers(width: Int, height: Int) {
+    
+    private func initBuffers(width: Int, height: Int) {
         let bufferSize = MemoryLayout<StaticData>.stride
-
-        var staticData = StaticData(positions: (SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>()),
-                                    impulses: (SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>(), SIMD2<Float>()),
-                                    impulseScalar: SIMD2<Float>(),
-                                    offsets: SIMD2<Float>(1.0/Float(width), 1.0/Float(height)),
-                                    screenSize: SIMD2<Float>(Float(width), Float(height)),
-                                    inkRadius: 150 /* QQQ 150 */ / Renderer.ScreenScaleAdjustment)
-
-        uniformsBuffers.removeAll()
-        for _ in 0..<Renderer.MaxBuffers {
+        var staticData = StaticData(
+            positions: (.zero, .zero, .zero, .zero, .zero),
+            impulses: (.zero, .zero, .zero, .zero, .zero),
+            impulseScalar: .zero,
+            offsets: SIMD2<Float>(1.0/Float(width), 1.0/Float(height)),
+            screenSize: SIMD2<Float>(Float(width), Float(height)),
+            inkRadius: 150 / Renderer.ScreenScaleAdjustment
+        )
+        
+        uniformsBuffers = (0..<Renderer.MaxBuffers).map {
             let buffer = MetalDevice.sharedInstance.device.makeBuffer(bytes: &staticData, length: bufferSize, options: .storageModeShared)!
-
-            uniformsBuffers.append(buffer)
-        }
-    }
-
-    private final func nextBuffer(positions: FloatTuple?, directions: FloatTuple?) -> MTLBuffer {
-        let buffer = uniformsBuffers[avaliableBufferIndex]
-
-        let bufferData = buffer.contents().bindMemory(to: StaticData.self, capacity: 1)
-
-        if let positions = positions, let directions = directions {
-            let alteredPositions = positions / Renderer.ScreenScaleAdjustment
-            let impulses = (positions - directions) / Renderer.ScreenScaleAdjustment
-
-            bufferData.pointee.positions = alteredPositions
-            bufferData.pointee.impulses = impulses
-            bufferData.pointee.impulseScalar = SIMD2<Float>(0.8, 0.0)
-        }
-
-        avaliableBufferIndex = (avaliableBufferIndex + 1) % Renderer.MaxBuffers
-        return buffer
-    }
-
-    private final func drawSlab() -> Slab {
-        switch currentIndex {
-        case 1:
-            return pressure
-        case 2:
-            return velocity
-        case 3:
-            return velocityVorticity
-        default:
-            return density
+            buffer.label = "UniformsBuffer_\($0)"
+            return buffer
         }
     }
     
+    private func nextBuffer(positions: FloatTuple?, directions: FloatTuple?) -> MTLBuffer {
+        let buffer = uniformsBuffers[avaliableBufferIndex]
+        if let positions = positions, let directions = directions {
+            let bufferData = buffer.contents().bindMemory(to: StaticData.self, capacity: 1)
+            bufferData.pointee.positions = positions / Renderer.ScreenScaleAdjustment
+            bufferData.pointee.impulses = (positions - directions) / Renderer.ScreenScaleAdjustment
+            bufferData.pointee.impulseScalar = SIMD2<Float>(0.8, 0.0)
+        }
+        avaliableBufferIndex = (avaliableBufferIndex + 1) % Renderer.MaxBuffers
+        return buffer
+    }
+    
+    private func drawSlab() -> Slab {
+        switch currentIndex {
+        case 1: return pressure
+        case 2: return velocity
+        case 3: return velocityVorticity
+        default: return density
+        }
+    }
+    
+}
+
+// MARK: - MTKViewDelegate
+extension Renderer: MTKViewDelegate {
+    
     func draw(in view: MTKView) {
-        // Ensure valid size
+        guard let drawable = view.currentDrawable else { return }
+        
         let size = view.drawableSize
         let width = Int(size.width / CGFloat(Renderer.ScreenScaleAdjustment))
         let height = Int(size.height / CGFloat(Renderer.ScreenScaleAdjustment))
         
-        // Lazy initialization: if surfaces are uninitialized or size changed, recreate them
         if width > 0, height > 0,
            (density == nil || Int(initializedSize.width) != Int(size.width) || Int(initializedSize.height) != Int(size.height)) {
             initSurfaces(width: width, height: height)
             initBuffers(width: width, height: height)
             initializedSize = size
         }
-        
-        // If we still don't have valid surfaces, skip drawing
         guard density != nil else { return }
         
-        // --- existing rendering code follows ---
-        semaphore.wait()
+        _ = semaphore.wait(timeout: .distantFuture)
         let commandBuffer = MetalDevice.sharedInstance.newCommandBuffer()
+        commandBuffer.addCompletedHandler { _ in self.semaphore.signal() }
+        
+        let hasInteraction = (positions != nil && directions != nil)
         let dataBuffer = nextBuffer(positions: positions, directions: directions)
         
-        commandBuffer.addCompletedHandler { _ in
-            self.semaphore.signal()
+        // --- Advect ---
+        let advectTargets: [(Slab, Slab)] = [(velocity, velocity), (density, density)]
+        for (src, dst) in advectTargets {
+            executeShader(advectShader, commandBuffer, dataBuffer, destination: dst) { enc in
+                enc.setFragmentTexture(self.velocity.ping, index: 0)
+                enc.setFragmentTexture(src.ping, index: 1)
+            }
         }
         
-        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: velocity, destination: velocity)
-        advect(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, source: density, destination: density)
-        
-        if let _ = positions, let _ = directions {
-            applyForceVector(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: velocity)
-            applyForceScalar(commandBuffer: commandBuffer, dataBuffer: dataBuffer, destination: density)
+        // Apply forces only when interacting
+        if hasInteraction {
+            executeShader(applyForceVectorShader, commandBuffer, dataBuffer, destination: velocity) {
+                $0.setFragmentTexture(self.velocity.ping, index: 0)
+            }
+            executeShader(applyForceScalarShader, commandBuffer, dataBuffer, destination: density) {
+                $0.setFragmentTexture(self.density.ping, index: 0)
+            }
         }
         
-        computeVorticity(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityVorticity)
-        computeVorticityConfinement(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, vorticity: velocityVorticity, destination: velocity)
-        
-        computeDivergence(commandBuffer: commandBuffer, dataBuffer: dataBuffer, velocity: velocity, destination: velocityDivergence)
-        
-        for _ in 0..<40 {
-            computePressure(commandBuffer: commandBuffer, dataBuffer: dataBuffer, x: pressure, b: velocityDivergence, destination: pressure)
+        // Vorticity
+        executeShader(vorticityShader, commandBuffer, dataBuffer, destination: velocityVorticity) {
+            $0.setFragmentTexture(self.velocity.ping, index: 0)
+        }
+        executeShader(vorticityConfinementShader, commandBuffer, dataBuffer, destination: velocity) {
+            $0.setFragmentTexture(self.velocity.ping, index: 0)
+            $0.setFragmentTexture(self.velocityVorticity.ping, index: 1)
         }
         
-        subtractGradient(commandBuffer: commandBuffer, dataBuffer: dataBuffer, p: pressure, w: velocity, destination: velocity)
-        
-        if let drawable = view.currentDrawable {
-            let nextTexture = drawable.texture
-            render(commandBuffer: commandBuffer, destination: nextTexture)
-            commandBuffer.present(drawable)
+        // Divergence
+        executeShader(divergenceShader, commandBuffer, dataBuffer, destination: velocityDivergence) {
+            $0.setFragmentTexture(self.velocity.ping, index: 0)
         }
         
+        // Pressure solve
+        let iterations = hasInteraction ? pressureIterations : 10
+        for _ in 0..<iterations {
+            executeShader(jacobiShader, commandBuffer, dataBuffer, destination: pressure) {
+                $0.setFragmentTexture(self.pressure.ping, index: 0)
+                $0.setFragmentTexture(self.velocityDivergence.ping, index: 1)
+            }
+        }
+        
+        // Subtract gradient
+        executeShader(gradientShader, commandBuffer, dataBuffer, destination: velocity) {
+            $0.setFragmentTexture(self.pressure.ping, index: 0)
+            $0.setFragmentTexture(self.velocity.ping, index: 1)
+        }
+        
+        // Render to screen
+        let shader = (currentIndex >= 2 ? renderVector : renderScalar)!
+        executeShader(shader, commandBuffer, dataBuffer, destinationTexture: drawable.texture) {
+            $0.setFragmentTexture(self.drawSlab().ping, index: 0)
+        }
+        
+        commandBuffer.present(drawable)
         commandBuffer.commit()
         directions = positions
     }
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        // Just record the size; do not create textures here
         initializedSize = size
     }
 }
 
-//Fluid dynamics step methods
+// MARK: - Unified draw helper
 extension Renderer {
-    private final func advect(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, velocity: Slab, source: Slab, destination: Slab) {
-        advectShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(velocity.ping, index: 0)
-            commandEncoder.setFragmentTexture(source.ping, index: 1)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
+    private func executeShader(_ shader: RenderShader, _ commandBuffer: MTLCommandBuffer, _ dataBuffer: MTLBuffer, destination: Slab, configure: (MTLRenderCommandEncoder) -> Void) {
+        shader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { encoder in
+            encoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
+            configure(encoder)
+            encoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
         }
-
         destination.swap()
     }
-
-    private final func applyForceVector(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, destination: Slab) {
-        applyForceVectorShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(destination.ping, index: 0)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func applyForceScalar(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, destination: Slab) {
-        applyForceScalarShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(destination.ping, index: 0)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func computeDivergence(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, velocity: Slab, destination: Slab) {
-        divergenceShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(velocity.ping, index: 0)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func computePressure(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, x: Slab, b: Slab, destination: Slab) {
-        jacobiShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(x.ping, index: 0)
-            commandEncoder.setFragmentTexture(b.ping, index: 1)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func computeVorticity(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, velocity: Slab, destination: Slab) {
-        vorticityShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(velocity.ping, index: 0)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func computeVorticityConfinement(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, velocity: Slab, vorticity: Slab, destination: Slab) {
-        vorticityConfinementShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(velocity.ping, index: 0)
-            commandEncoder.setFragmentTexture(vorticity.ping, index: 1)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func subtractGradient(commandBuffer: MTLCommandBuffer, dataBuffer: MTLBuffer, p: Slab, w: Slab, destination: Slab) {
-        gradientShader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination.pong) { (commandEncoder) in
-            commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-            commandEncoder.setFragmentTexture(p.ping, index: 0)
-            commandEncoder.setFragmentTexture(w.ping, index: 1)
-
-            commandEncoder.setFragmentBuffer(dataBuffer, offset: 0, index: 0)
-        }
-
-        destination.swap()
-    }
-
-    private final func render(commandBuffer: MTLCommandBuffer, destination: MTLTexture) {
-        if currentIndex >= 2 {
-            renderVector.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination) { (commandEncoder) in
-                commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-                commandEncoder.setFragmentTexture(self.drawSlab().ping, index: 0)
-            }
-        } else {
-            renderScalar.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destination) { (commandEncoder) in
-                commandEncoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
-                commandEncoder.setFragmentTexture(self.drawSlab().ping, index: 0)
-            }
+    
+    private func executeShader(_ shader: RenderShader, _ commandBuffer: MTLCommandBuffer, _ dataBuffer: MTLBuffer, destinationTexture: MTLTexture, configure: (MTLRenderCommandEncoder) -> Void) {
+        shader.calculateWithCommandBuffer(buffer: commandBuffer, indices: indexData, count: Renderer.indices.count, texture: destinationTexture) { encoder in
+            encoder.setVertexBuffer(self.vertData, offset: 0, index: 0)
+            configure(encoder)
         }
     }
 }
-
-    
-
