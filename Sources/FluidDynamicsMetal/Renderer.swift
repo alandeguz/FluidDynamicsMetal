@@ -8,19 +8,19 @@
 
 import MetalKit
 
-typealias FloatTuple = (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)
-private let pressureIterations = 40
+public typealias FloatTuple = (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)
+fileprivate let pressureIterations = 40
 
 // Operators
-func / (rhs: FloatTuple, lhs: Float) -> FloatTuple {
+public func / (rhs: FloatTuple, lhs: Float) -> FloatTuple {
     (rhs.0 / lhs, rhs.1 / lhs, rhs.2 / lhs, rhs.3 / lhs, rhs.4 / lhs)
 }
-func - (rhs: FloatTuple, lhs: FloatTuple) -> FloatTuple {
+public func - (rhs: FloatTuple, lhs: FloatTuple) -> FloatTuple {
     (rhs.0 - lhs.0, rhs.1 - lhs.1, rhs.2 - lhs.2, rhs.3 - lhs.3, rhs.4 - lhs.4)
 }
 
 // Uniforms
-struct StaticData {
+public struct StaticData {
     var positions: FloatTuple
     var impulses: FloatTuple
     var impulseScalar: SIMD2<Float>
@@ -29,12 +29,12 @@ struct StaticData {
     var inkRadius: simd_float1
 }
 
-struct VertexData {
+public struct VertexData {
     let position: SIMD2<Float>
     let texCoord: SIMD2<Float>
 }
 
-class Renderer: NSObject {
+public class Renderer: NSObject {
     static let MaxBuffers = 3
     static let ScreenScaleAdjustment: Float = 1.0
     
@@ -80,26 +80,21 @@ class Renderer: NSObject {
     private var currentIndex = 0
     
     // MARK: - Init
-    init(metalView: MTKView) throws {
+    public init(metalView: MTKView) throws {
         super.init()
         setupShaders()
         configure(metalView: metalView)
-    }
-    
-    init(noView: Bool) throws {
-        super.init()
-        setupShaders()
     }
     
     func update(metalView: MTKView) throws {
         configure(metalView: metalView)
     }
     
-    func nextSlab() {
+    public func nextSlab() {
         currentIndex = (currentIndex + 1) % 4
     }
     
-    func updateInteraction(points: FloatTuple?, in view: MTKView) {
+    public func updateInteraction(points: FloatTuple?, in view: MTKView) {
         positions = points
     }
     
@@ -177,7 +172,7 @@ class Renderer: NSObject {
 // MARK: - MTKViewDelegate
 extension Renderer: MTKViewDelegate {
     
-    func draw(in view: MTKView) {
+    public func draw(in view: MTKView) {
         guard let drawable = view.currentDrawable else { return }
         
         let size = view.drawableSize
@@ -258,7 +253,7 @@ extension Renderer: MTKViewDelegate {
         directions = positions
     }
     
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         initializedSize = size
     }
 }

@@ -9,11 +9,11 @@
 import Foundation
 import Metal
 
-enum MetalDeviceError: Error {
+public enum MetalDeviceError: Error {
     case failedToCreateFunction(name: String)
 }
 
-class MetalDevice {
+public class MetalDevice {
     static let sharedInstance = MetalDevice()
     
     private let pipelineCache = NSCache<AnyObject, AnyObject>()
@@ -35,7 +35,7 @@ class MetalDevice {
         
         activeCommandBuffer = commandQueue.makeCommandBuffer()!
         
-        defaultLibrary = device.makeDefaultLibrary()!
+        defaultLibrary = try! device.makeDefaultLibrary(bundle: Bundle.module)
     }
     
     //Convenience methods

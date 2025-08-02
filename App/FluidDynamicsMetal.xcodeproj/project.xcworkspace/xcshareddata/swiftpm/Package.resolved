@@ -1,0 +1,15 @@
+{
+  "originHash" : "8b7c0dba5e09966a08a11bcca54eea8559f00f52e8856f2f476db8a79a47b095",
+  "pins" : [
+    {
+      "identity" : "swiftlint",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/alandeguz/SwiftLint",
+      "state" : {
+        "revision" : "e8ee8407f7b0a46f5ab39427caf1253a8d5d4dd6",
+        "version" : "0.59.1"
+      }
+    }
+  ],
+  "version" : 3
+}

@@ -10,14 +10,14 @@ import Foundation
 import CoreMedia
 import Metal
 
-struct PipelineStateConfiguration {
+public struct PipelineStateConfiguration {
     let pixelFormat: MTLPixelFormat
     let vertexShader: String
     let fragmentShader: String
     let computeShader: String
 }
 
-class RenderShader {
+public class RenderShader {
     private var pipelineState: PipelineStateConfiguration
     private var renderPipelineState: MTLRenderPipelineState?
     

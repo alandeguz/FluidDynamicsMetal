@@ -6,8 +6,8 @@
 //  Copyright © 2025 Kidlat Tech. All rights reserved.
 //
 
-import SwiftUI
 import MetalKit
+import SwiftUI
 
 struct ContentView: View {
     var body: some View {

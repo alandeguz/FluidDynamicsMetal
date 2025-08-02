@@ -1,0 +1,13 @@
+//
+//  Config-debug.xcconfig
+//  FluidDynamicsMetal
+//
+//  Created by DeGuzman, Alan on 8/1/25.
+//  Copyright © 2025 Kidlat Tech. All rights reserved.
+//
+
+// Configuration settings file format documentation can be found at:
+// https://developer.apple.com/documentation/xcode/adding-a-build-configuration-file-to-your-project
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.V01.FluidDynamicsMetalApp
+DEVELOPMENT_TEAM = 35J7D43B68

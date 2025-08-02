@@ -6,31 +6,22 @@
 //  Copyright © 2017 Andrei-Sergiu Pițiș. All rights reserved.
 //
 
-import UIKit
+import FluidDynamicsMetal
 import MetalKit
-
-let MaxBuffers = 3
+import UIKit
 
 class RenderViewController: UIViewController {
 
     var renderer: Renderer!
     var metalView: MTKView {
-        return view as! MTKView
+        guard let theView = view as? MTKView else {
+            fatalError("MTKView view not found")
+        }
+        return theView
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-//        view.addSubview({
-//           let view = UIView(frame: .init(origin: .init(x: 20, y: 20), size: .init(width: 200, height: 200)))
-//            view.backgroundColor = UIColor.clear
-//            view.addSubview({
-//                let label = UILabel(frame: .init(origin: .init(x: 0, y: 0), size: .init(width: 100, height: 30)))
-//                label.textColor = .white
-//                label.text = "test"
-//                return label
-//            }())
-//            return view
-//        }())
 
         renderer = try? Renderer(metalView: metalView)
         metalView.delegate = renderer

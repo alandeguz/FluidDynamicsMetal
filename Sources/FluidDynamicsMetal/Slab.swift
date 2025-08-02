@@ -9,7 +9,7 @@
 import Foundation
 import Metal
 
-class Slab {
+public class Slab {
     var ping: MTLTexture!
     var pong: MTLTexture!
     

@@ -6,6 +6,7 @@
 //  Copyright © 2025 Kidlat Tech. All rights reserved.
 //
 
+import FluidDynamicsMetal
 import MetalKit
 
 class RenderMTKView: MTKView {

@@ -7,9 +7,8 @@
 //
 
 import AppKit
-import MetalKit
-
 import Cocoa
+import FluidDynamicsMetal
 import MetalKit
 
 class RenderViewController: NSViewController {
@@ -17,8 +16,10 @@ class RenderViewController: NSViewController {
     
     // Strongly type the view as RenderMTKView
     var metalView: RenderMTKView {
-        print(view)
-        return view as! RenderMTKView
+        guard let theView = view as? RenderMTKView else {
+            fatalError("RenderMTKView unavailable")
+        }
+        return theView
     }
     
     var eventMonitor: Any?
