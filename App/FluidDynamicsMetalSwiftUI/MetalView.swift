@@ -11,15 +11,16 @@ import SwiftUI
 
 #if os(iOS)
 typealias PlatformViewRepresentable = UIViewRepresentable
-typealias UserMTKView = TouchMTKView
-#else
+#endif
+
+#if os(macOS)
 typealias PlatformViewRepresentable = NSViewRepresentable
-typealias UserMTKView = ClickMTKView
 #endif
 
 // MARK: - Cross-platform MetalView
 
 struct MetalView: PlatformViewRepresentable {
+    
     class Coordinator: NSObject {
         var renderer: Renderer?
         var metalView: MTKView?
@@ -38,7 +39,9 @@ struct MetalView: PlatformViewRepresentable {
     }
     
     func updateUIView(_ uiView: MTKView, context: Context) {}
-#else
+#endif
+
+#if os(macOS)
     func makeNSView(context: Context) -> MTKView {
         let v = genericView(context: context)
         // Automatically focus to receive key events
@@ -62,12 +65,7 @@ struct MetalView: PlatformViewRepresentable {
         metalView.delegate = renderer
         context.coordinator.renderer = renderer
         context.coordinator.metalView = metalView
-        
-#if os(iOS)
-        (metalView as? TouchMTKView)?.renderer = renderer
-#else
-        (metalView as? ClickMTKView)?.renderer = renderer
-#endif
+        (metalView as? UserMTKView)?.renderer = renderer
     }
     
 #if os(iOS)
@@ -107,12 +105,11 @@ extension MetalView.Coordinator {
 }
 #endif
 
-// MARK: - iOS TouchMTKView
+class UserMTKView: MTKView {
 
-#if os(iOS)
-class TouchMTKView: MTKView {
     weak var renderer: Renderer?
     
+#if os(iOS)
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         sendTouches(touches)
     }
@@ -149,15 +146,11 @@ class TouchMTKView: MTKView {
         
         renderer.updateInteraction(points: tuple.pointee, in: self)
     }
-}
+
 #endif
 
-// MARK: - macOS ClickMTKView
-
 #if os(macOS)
-class ClickMTKView: MTKView {
-    weak var renderer: Renderer?
-    
+
     override var acceptsFirstResponder: Bool { true }
     
     override func keyDown(with event: NSEvent) {
@@ -196,8 +189,9 @@ class ClickMTKView: MTKView {
         let points: FloatTuple = (pos, pos, pos, pos, pos)
         renderer.updateInteraction(points: points, in: self)
     }
-}
+    
 #endif
+}
 
 #Preview {
     MetalView()
