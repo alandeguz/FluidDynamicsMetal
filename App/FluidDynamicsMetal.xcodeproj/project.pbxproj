@@ -21,6 +21,7 @@
 		A06F20E52E3D8350005AFC47 /* FluidDynamicsMetal in Frameworks */ = {isa = PBXBuildFile; productRef = A06F20E42E3D8350005AFC47 /* FluidDynamicsMetal */; };
 		A06F20F02E3D8370005AFC47 /* FluidDynamicsMetal in Frameworks */ = {isa = PBXBuildFile; productRef = A06F20EF2E3D8370005AFC47 /* FluidDynamicsMetal */; };
 		A06F20F22E3D837B005AFC47 /* FluidDynamicsMetal in Frameworks */ = {isa = PBXBuildFile; productRef = A06F20F12E3D837B005AFC47 /* FluidDynamicsMetal */; };
+		A0925E7D2E3DB3DF008BA6CD /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0925E7C2E3DB3DF008BA6CD /* SceneDelegate.swift */; };
 		A0B959842E3B1F9700A28436 /* RenderMTKView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B959832E3B1F8900A28436 /* RenderMTKView.swift */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +42,7 @@
 		75F3F0771F311D4A00A3EC4A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		75F3F07E1F311D7800A3EC4A /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		A0925E0A2E3DA6BB008BA6CD /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		A0925E7C2E3DB3DF008BA6CD /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A0B959832E3B1F8900A28436 /* RenderMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderMTKView.swift; sourceTree = "<group>"; };
 		E0218B772D7EB8EB0069F139 /* FluidDynamicsMetalSwiftUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FluidDynamicsMetalSwiftUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -119,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				75F3F06B1F311D4A00A3EC4A /* AppDelegate.swift */,
+				A0925E7C2E3DB3DF008BA6CD /* SceneDelegate.swift */,
 				75A202DC1F4818C30089F3A7 /* RenderViewController.swift */,
 				75F3F0721F311D4A00A3EC4A /* Assets.xcassets */,
 				75F3F06F1F311D4A00A3EC4A /* Main.storyboard */,
@@ -209,7 +212,7 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 2600;
-				ORGANIZATIONNAME = "Kidlat Tech";
+				ORGANIZATIONNAME = "";
 				TargetAttributes = {
 					75D520911FE5539E003525F9 = {
 						CreatedOnToolsVersion = 9.2;
@@ -295,6 +298,7 @@
 			files = (
 				75A202DD1F4818C30089F3A7 /* RenderViewController.swift in Sources */,
 				75F3F06C1F311D4A00A3EC4A /* AppDelegate.swift in Sources */,
+				A0925E7D2E3DB3DF008BA6CD /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

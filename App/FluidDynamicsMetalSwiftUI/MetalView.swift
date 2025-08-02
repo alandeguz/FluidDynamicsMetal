@@ -3,7 +3,6 @@
 //  FluidDynamicsMetal
 //
 //  Created by DeGuzman, Alan on 7/30/25.
-//  Copyright © 2025 Kidlat Tech. All rights reserved.
 //
 
 import FluidDynamicsMetal
