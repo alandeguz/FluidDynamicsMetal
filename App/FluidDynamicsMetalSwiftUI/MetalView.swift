@@ -20,8 +20,9 @@ typealias UserMTKView = ClickMTKView
 // MARK: - Cross-platform MetalView
 
 struct MetalView: PlatformViewRepresentable {
-    class Coordinator {
+    class Coordinator: NSObject {
         var renderer: Renderer?
+        var metalView: MTKView?
     }
     
     func makeCoordinator() -> Coordinator {
@@ -30,11 +31,24 @@ struct MetalView: PlatformViewRepresentable {
     
     // MARK: - Platform-specific makeView
 #if os(iOS)
-    func makeUIView(context: Context) -> MTKView { return genericView(context: context) }
-    func updateUIView(_ uiView: MTKView, context: Context) { }
+    func makeUIView(context: Context) -> MTKView {
+        let v = genericView(context: context)
+        addGestures(to: v, context: context)
+        return v
+    }
+    
+    func updateUIView(_ uiView: MTKView, context: Context) {}
 #else
-    func makeNSView(context: Context) -> MTKView { return genericView(context: context) }
-    func updateNSView(_ nsView: MTKView, context: Context) { }
+    func makeNSView(context: Context) -> MTKView {
+        let v = genericView(context: context)
+        // Automatically focus to receive key events
+        DispatchQueue.main.async {
+            v.window?.makeFirstResponder(v)
+        }
+        return v
+    }
+    
+    func updateNSView(_ nsView: MTKView, context: Context) {}
 #endif
     
     private func genericView(context: Context) -> MTKView {
@@ -47,20 +61,51 @@ struct MetalView: PlatformViewRepresentable {
         let renderer = try? Renderer(metalView: metalView)
         metalView.delegate = renderer
         context.coordinator.renderer = renderer
+        context.coordinator.metalView = metalView
         
-        // Assign renderer to custom subclass
 #if os(iOS)
-        if let touchView = metalView as? TouchMTKView {
-            touchView.renderer = renderer
-        }
+        (metalView as? TouchMTKView)?.renderer = renderer
 #else
-        if let clickView = metalView as? ClickMTKView {
-            clickView.renderer = renderer
-        }
+        (metalView as? ClickMTKView)?.renderer = renderer
 #endif
     }
     
+#if os(iOS)
+    /// Add gesture recognizers similar to RenderViewController on iOS
+    private func addGestures(to metalView: MTKView, context: Context) {
+        // Single-finger double tap: toggle pause
+        let singleDoubleTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.doubleTap)
+        )
+        singleDoubleTap.numberOfTapsRequired = 2
+        singleDoubleTap.numberOfTouchesRequired = 1
+        metalView.addGestureRecognizer(singleDoubleTap)
+        
+        // Two-finger double tap: change source
+        let twoFingerDoubleTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.changeSource)
+        )
+        twoFingerDoubleTap.numberOfTapsRequired = 2
+        twoFingerDoubleTap.numberOfTouchesRequired = 2
+        metalView.addGestureRecognizer(twoFingerDoubleTap)
+    }
+#endif
 }
+
+// MARK: - Gesture actions for iOS
+#if os(iOS)
+extension MetalView.Coordinator {
+    @objc func doubleTap() {
+        metalView?.isPaused.toggle()
+    }
+    
+    @objc func changeSource() {
+        renderer?.nextSlab()
+    }
+}
+#endif
 
 // MARK: - iOS TouchMTKView
 
@@ -112,6 +157,19 @@ class TouchMTKView: MTKView {
 #if os(macOS)
 class ClickMTKView: MTKView {
     weak var renderer: Renderer?
+    
+    override var acceptsFirstResponder: Bool { true }
+    
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 0x31: // Spacebar
+            isPaused.toggle()
+        case 0x01: // "S"
+            renderer?.nextSlab()
+        default:
+            super.keyDown(with: event)
+        }
+    }
     
     override func mouseDown(with event: NSEvent) {
         sendInteraction(for: event)
