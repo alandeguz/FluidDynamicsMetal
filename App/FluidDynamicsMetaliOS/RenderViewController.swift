@@ -117,6 +117,7 @@ class RenderViewController: UIViewController {
     }
 
     @objc final func doubleTap() {
+        // swiftlint:disable:next toggle_bool
         metalView.isPaused = !metalView.isPaused
     }
 
