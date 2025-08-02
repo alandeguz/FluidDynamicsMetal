@@ -40,14 +40,10 @@ struct MetalView: PlatformViewRepresentable {
     
     func updateUIView(_ uiView: MTKView, context: Context) {}
 #endif
-
+    
 #if os(macOS)
     func makeNSView(context: Context) -> MTKView {
         let v = genericView(context: context)
-        // Automatically focus to receive key events
-        DispatchQueue.main.async {
-            v.window?.makeFirstResponder(v)
-        }
         return v
     }
     
@@ -106,7 +102,7 @@ extension MetalView.Coordinator {
 #endif
 
 class UserMTKView: MTKView {
-
+    
     weak var renderer: Renderer?
     
 #if os(iOS)
@@ -146,12 +142,16 @@ class UserMTKView: MTKView {
         
         renderer.updateInteraction(points: tuple.pointee, in: self)
     }
-
+    
 #endif
-
+    
 #if os(macOS)
-
     override var acceptsFirstResponder: Bool { true }
+    
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
     
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
