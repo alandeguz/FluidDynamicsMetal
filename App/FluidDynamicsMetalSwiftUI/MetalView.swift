@@ -11,8 +11,10 @@ import SwiftUI
 
 #if os(iOS)
 typealias PlatformViewRepresentable = UIViewRepresentable
+typealias UserMTKView = TouchMTKView
 #else
 typealias PlatformViewRepresentable = NSViewRepresentable
+typealias UserMTKView = ClickMTKView
 #endif
 
 // MARK: - Cross-platform MetalView
@@ -28,23 +30,18 @@ struct MetalView: PlatformViewRepresentable {
     
     // MARK: - Platform-specific makeView
 #if os(iOS)
-    func makeUIView(context: Context) -> MTKView {
-        let metalView = TouchMTKView()  // Use custom subclass
-        setup(metalView, context: context)
-        return metalView
-    }
-    
+    func makeUIView(context: Context) -> MTKView { return genericView(context: context) }
     func updateUIView(_ uiView: MTKView, context: Context) { }
-    
 #else
-    func makeNSView(context: Context) -> MTKView {
-        let metalView = ClickMTKView()
-        setup(metalView, context: context)
-        return metalView
-    }
-    
+    func makeNSView(context: Context) -> MTKView { return genericView(context: context) }
     func updateNSView(_ nsView: MTKView, context: Context) { }
 #endif
+    
+    private func genericView(context: Context) -> MTKView {
+        let metalView = UserMTKView()
+        setup(metalView, context: context)
+        return metalView
+    }
     
     private func setup(_ metalView: MTKView, context: Context) {
         let renderer = try? Renderer(metalView: metalView)
